@@ -1,0 +1,76 @@
+CREATE TABLE Inventario (
+    ProductoId INT PRIMARY KEY AUTO_INCREMENT,
+    NombreProducto VARCHAR(100) NOT NULL,
+    Cantidad INT NOT NULL,
+    Precio DECIMAL(10,2) NOT NULL
+);
+
+CREATE TABLE HistorialInventario (
+    HistorialId INT PRIMARY KEY AUTO_INCREMENT,
+    ProductoId INT,
+    FechaCambio DATETIME NOT NULL,
+    Cambio INT NOT NULL,
+    Motivo VARCHAR(255) NOT NULL,
+    FOREIGN KEY (ProductoId) REFERENCES Inventario(ProductoId)
+);
+
+CREATE TEMPORARY TABLE CambiosInventario (
+    ProductoId INT,
+    Cambio INT,
+    Motivo VARCHAR(255)
+);
+
+INSERT INTO Inventario (ProductoId, NombreProducto, Cantidad, Precio) VALUES
+(1, 'Lápiz', 100, 0.50),
+(2, 'Cuaderno', 50, 1.25),
+(3, 'Borrador', 200, 0.75);
+
+INSERT INTO CambiosInventario (ProductoId, Cambio, Motivo) VALUES
+(1, 10, 'Recepción de mercancía'),
+(2, -5, 'Venta de productos'),
+(3, 20, 'Ajuste de inventario');
+
+INSERT INTO HistorialInventario (ProductoId, FechaCambio, Cambio, Motivo) VALUES
+(1, '2024-10-20', -20, 'Venta de lápices'),
+(2, '2024-10-21', -10, 'Venta de cuadernos'),
+(3, '2024-10-22', 50, 'Reposición de borradores');
+
+DELIMITER //
+
+CREATE PROCEDURE RegistrarCambiosInventario()
+BEGIN
+
+    DECLARE ProductoId INT;
+    DECLARE Cambio INT;
+    DECLARE Motivo VARCHAR(255);
+    DECLARE done BOOLEAN DEFAULT FALSE;
+
+    DECLARE CambiosCursor CURSOR FOR
+        SELECT ProductoId, Cambio, Motivo FROM CambiosInventario;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+    START TRANSACTION;
+    OPEN CambiosCursor;
+
+    LoopCursor: LOOP
+        FETCH CambiosCursor INTO ProductoId, Cambio, Motivo;
+        IF done THEN
+            LEAVE LoopCursor;
+        END IF;
+
+        UPDATE Inventario 
+        SET Cantidad = Cantidad + Cambio 
+        WHERE Inventario.ProductoId = ProductoId;
+
+        INSERT INTO HistorialInventario (ProductoId, FechaCambio, Cambio, Motivo) 
+        VALUES (ProductoId, NOW(), Cambio, Motivo);
+    END LOOP;
+
+    CLOSE CambiosCursor;
+    COMMIT;
+END//
+
+DELIMITER ;
+
+CALL RegistrarCambiosInventario();
